@@ -2,6 +2,7 @@ mod config;
 mod index;
 mod pep_691;
 mod states;
+mod errors;
 
 use axum::{routing::get, Router};
 use config::Config;
@@ -11,7 +12,7 @@ use tower_http::trace::TraceLayer;
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::INFO)
+        .with_max_level(tracing::Level::DEBUG)
         .init();
 
     let config = envy::from_env::<Config>().unwrap();

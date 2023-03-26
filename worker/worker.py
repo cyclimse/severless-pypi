@@ -1,6 +1,6 @@
 import os
+import logging
 import subprocess
-import shutil
 import tempfile
 import sys
 import pathlib
@@ -15,10 +15,14 @@ SCW_SECRET_KEY = os.environ["SCW_SECRET_KEY"]
 S3_BUCKET = os.environ["S3_BUCKET"]
 S3_ENDPOINT = os.getenv("S3_ENDPOINT", "https://s3.fr-par.scw.cloud")
 S3_REGION = os.getenv("S3_REGION", "fr-par")
+ZIG_TOOLCHAIN = os.getenv("ZIG_TOOLCHAIN", "")
+
+logging.basicConfig(format="{levelname:7} {message}", style="{", level=logging.INFO)
 
 
 class Package(BaseModel):
     project: str
+    filename: str
     archive_url: str
 
 
@@ -30,7 +34,17 @@ s3 = boto3.resource(
     aws_access_key_id=SCW_ACCESS_KEY,
     aws_secret_access_key=SCW_SECRET_KEY,
 )
+
 app = FastAPI()
+
+
+def get_zig_toolchain_env() -> dict[str, str]:
+    """Set the environment variables to use Zig."""
+    return {
+        "CC": "zig cc",
+        "CXX": "zig c++",
+        "CFLAGS": "-mtune=x86_64 -lc++ -Os -g0 -ftls-model=global-dynamic -Wl,--strip--all",
+    }
 
 
 @app.post("/")
@@ -40,10 +54,10 @@ async def install_package(package: Package):
         archive = archive.split("#")[0]
     with (
         tempfile.TemporaryDirectory() as build_dir,
-        httpx.stream("GET", package.archive_url) as r,
+        httpx.stream("GET", package.archive_url) as req,
         open(os.path.join(build_dir, archive), "wb") as fp,
     ):
-        for chunk in r.iter_bytes():
+        for chunk in req.iter_bytes():
             fp.write(chunk)
         fp.flush()
 
@@ -57,22 +71,39 @@ async def install_package(package: Package):
             os.path.join(build_dir, archive),
         ]
 
+        env = {}
+        if ZIG_TOOLCHAIN:
+            env |= get_zig_toolchain_env()
+
         subprocess.run(
             command,
             check=True,
             cwd=build_dir,
+            env=env,
         )
 
+        logging.info(
+            "Successfully executed command %s",
+            " ".join(command[2:]),
+        )
+
+        # TODO?: cleanup this
         wheel = None
         for file in pathlib.Path(build_dir).iterdir():
-            print(file)
             if file.suffix == ".whl":
                 wheel = file.name
 
         if not wheel:
-            raise RuntimeError()
+            raise RuntimeError("Could not find wheel in output directory!")
+
+        key = os.path.join(package.project, package.filename)
+        logging.info(
+            "Uploading wheel %s to bucket %s with key %s", wheel, S3_BUCKET, key
+        )
 
         s3.Bucket(S3_BUCKET).upload_file(
-            os.path.join(build_dir, wheel), os.path.join(package.project, wheel)
+            os.path.join(build_dir, wheel),
+            key,
         )
-    return {"message": "Hello World"}
+
+    return {"message": f"Successfully built {package.filename}"}

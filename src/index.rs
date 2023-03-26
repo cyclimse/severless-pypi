@@ -1,5 +1,7 @@
+use crate::errors::{self, ServiceError};
 use crate::pep_691::{self, IndexProject};
 use crate::states::AppState;
+use aws_sdk_s3::error::{GetObjectError, GetObjectErrorKind};
 use axum::extract::Query;
 use flate2::read::GzDecoder;
 
@@ -30,30 +32,28 @@ pub fn forward_to_index(req: &mut Request<Body>, pypi_index: &str) {
 pub async fn pypi_index(
     State(state): State<AppState>,
     mut req: Request<Body>,
-) -> Result<Response<Body>, StatusCode> {
+) -> Result<Response<Body>, errors::ServiceError> {
     forward_to_index(&mut req, &state.config.pypi_index);
-    state
-        .http_client
-        .request(req)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
+    let resp = state.http_client.request(req).await?;
+    Ok(resp)
 }
 
 pub async fn pypi_package(
     State(state): State<AppState>,
-    Path(path): Path<String>,
+    Path(path): Path<String>, // Path to the package eg. /numpy
     mut req: Request<Body>,
-) -> Result<Response<Body>, StatusCode> {
+) -> Result<Response<Body>, errors::ServiceError> {
     forward_to_index(&mut req, &state.config.pypi_index);
-    let resp = state
-        .http_client
-        .request(req)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let resp = state.http_client.request(req).await?;
 
     if !resp.status().is_success() {
-        info!("Received unsuppported call to API");
-        return Ok(resp);
+        let index = &state.config.pypi_index;
+        let status = resp.status().to_string();
+        error!("Received status {status} from PyPI index {index} for package {path}");
+        if resp.status() == StatusCode::NOT_FOUND {
+            return Err(ServiceError::PackageNotFound { package: path });
+        }
+        return Err(resp.status().into());
     }
 
     let content_type = resp
@@ -61,27 +61,41 @@ pub async fn pypi_package(
         .get(http::header::CONTENT_TYPE)
         .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    if content_type
-        != pep_691::SUPPORTED_CONTENT_TYPE
-            .parse::<HeaderValue>()
-            .unwrap()
-    {
-        info!("ee unsuppported call to API");
-        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    if content_type != HeaderValue::from_static(pep_691::SUPPORTED_CONTENT_TYPE) {
+        error!(
+            "Received unsupported request with Content-Type {}",
+            content_type.to_str().unwrap_or_default()
+        );
+        return Err(ServiceError::GenericError {
+            status: Some(StatusCode::BAD_REQUEST),
+            message: Some("This index only supports pep_691 client requests. TIP: are you using the latest pip version?".to_owned()),
+        });
     }
 
     let (parts, body) = resp.into_parts();
     let body = hyper::body::aggregate(body).await.unwrap();
-    let mut d = GzDecoder::new(body.reader());
-
     let mut s = String::new();
-    d.read_to_string(&mut s).unwrap();
+
+    if let Some(encoding) = parts.headers.get(http::header::CONTENT_ENCODING) {
+        if encoding == HeaderValue::from_static("gzip") {
+            let mut d = GzDecoder::new(body.reader());
+            d.read_to_string(&mut s).unwrap();
+        } else {
+            error!(
+                "Unsupported PyPI response encoding {}",
+                encoding.to_str().unwrap_or_default()
+            );
+            return Err(StatusCode::INTERNAL_SERVER_ERROR.into());
+        }
+    } else {
+        body.reader().read_to_string(&mut s).unwrap();
+    }
 
     let mut project: pep_691::IndexProject = match serde_json::from_str(&s) {
         Ok(project) => project,
         Err(e) => {
-            error!(target: "app_events", "App Error: {}", e);
-            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+            error!("Could not serialize PyPI registry response: {e}");
+            return Err(StatusCode::INTERNAL_SERVER_ERROR)?;
         }
     };
 
@@ -97,7 +111,8 @@ pub async fn pypi_package(
 pub fn redirect_to_reserved(project: &mut IndexProject) {
     let mut versions = std::collections::HashMap::new();
 
-    for file in project.files.clone() {
+    let mut wheels = Vec::new();
+    for file in &project.files {
         if file.filename.ends_with(".tar.gz") {
             let version = file
                 .filename
@@ -108,20 +123,22 @@ pub fn redirect_to_reserved(project: &mut IndexProject) {
                 .unwrap()
                 .to_string();
             versions.insert(version, file.url.clone());
+        } else {
+            wheels.push(file.clone());
         }
     }
 
-    println!("{:?}", versions);
+    project.files.clear();
 
-    for file in &mut project.files {
-        if file.filename.ends_with(".whl") {
-            let version = file.filename.split("-").nth(1).unwrap();
-            let url = Uri::try_from(file.url.clone()).unwrap();
-            let path: Vec<&str> = url.path().split('/').collect();
+    for file in &wheels {
+        let version = file.filename.split("-").nth(1).unwrap();
+        let url = Uri::try_from(file.url.clone()).unwrap();
+        let path: Vec<&str> = url.path().split('/').collect();
 
-            let archive = versions.get(version).unwrap();
-
-            file.url = format!("download/{}?archive={}", path.last().unwrap(), archive);
+        if let Some(tarball) = versions.get(version) {
+            let mut file = file.clone();
+            file.url = format!("download/{}?archive={}", path.last().unwrap(), tarball);
+            project.files.push(file);
         }
     }
 }
@@ -134,6 +151,7 @@ pub struct Archive {
 #[derive(Serialize)]
 pub struct WorkerRequest {
     project: String,
+    filename: String,
     archive_url: String,
 }
 
@@ -141,12 +159,48 @@ pub async fn download_package(
     State(state): State<AppState>,
     archive: Query<Archive>,
     Path((package, filename)): Path<(String, String)>,
-) -> Result<Response<Body>, StatusCode> {
-    println!("{}", package);
-    println!("{}", filename);
+) -> Result<Response<Body>, ServiceError> {
+    info!(package = package, filename = filename);
+
+    // Check if package is present in S3
+    let key = format!("{}/{}", package, filename);
+    match state
+        .s3_client
+        .get_object()
+        .bucket(&state.config.s3_bucket)
+        .key(&key)
+        .send()
+        .await
+    {
+        Ok(res) => {
+            info!("Found file {filename} for {package} in s3 bucket");
+            let bytes = res.body.collect().await.unwrap();
+            let resp = Response::builder()
+                .status(http::StatusCode::OK)
+                .header(http::header::CONTENT_TYPE, "application/zip")
+                .body(Body::from(bytes.to_vec()))
+                .unwrap();
+            return Ok(resp);
+        }
+        Err(sdk_err) => match sdk_err.into_service_error() {
+            GetObjectError {
+                kind: GetObjectErrorKind::NoSuchKey(_),
+                ..
+            } => {}
+            err @ _ => {
+                let bucket = &state.config.s3_bucket;
+                error!("Got {err} while calling get object in {bucket} on key {key}");
+                return Err(ServiceError::GenericError {
+                    status: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                    message: Some(format!("Error while looking for file {filename}")),
+                });
+            }
+        },
+    }
 
     let worker_request = WorkerRequest {
-        project: package,
+        project: package.clone(),
+        filename: filename.clone(),
         archive_url: archive.archive.to_string(),
     };
 
@@ -159,13 +213,28 @@ pub async fn download_package(
         .body(Body::from(body))
         .unwrap();
 
-    println!("{:?}", req);
-
     state
         .http_client
         .request(req)
         .await
         .map_err(|_| StatusCode::NOT_IMPLEMENTED)?;
 
-    todo!()
+    let stream = state
+        .s3_client
+        .get_object()
+        .bucket(state.config.s3_bucket)
+        .key(format!("{}/{}", package, filename))
+        .send()
+        .await
+        .unwrap()
+        .body
+        .collect()
+        .await
+        .unwrap();
+
+    Ok(Response::builder()
+        .status(http::StatusCode::OK)
+        .header(http::header::CONTENT_TYPE, "application/zip")
+        .body(Body::from(stream.to_vec()))
+        .unwrap())
 }
