@@ -15,7 +15,7 @@ SCW_SECRET_KEY = os.environ["SCW_SECRET_KEY"]
 S3_BUCKET = os.environ["S3_BUCKET"]
 S3_ENDPOINT = os.getenv("S3_ENDPOINT", "https://s3.fr-par.scw.cloud")
 S3_REGION = os.getenv("S3_REGION", "fr-par")
-ZIG_TOOLCHAIN = os.getenv("ZIG_TOOLCHAIN", "")
+ZIG_TOOLCHAIN = os.getenv("ZIG_TOOLCHAIN", "yes")
 
 logging.basicConfig(format="{levelname:7} {message}", style="{", level=logging.INFO)
 
@@ -71,7 +71,7 @@ async def install_package(package: Package):
             os.path.join(build_dir, archive),
         ]
 
-        env = {}
+        env = {"PATH": os.environ["PATH"]}
         if ZIG_TOOLCHAIN:
             env |= get_zig_toolchain_env()
 

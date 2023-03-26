@@ -12,7 +12,7 @@ resource "scaleway_iam_policy" "object_read_only" {
   application_id = scaleway_iam_application.index.id
   rule {
     project_ids          = [data.scaleway_account_project.default.id]
-    permission_set_names = ["ObjectStorageFullAccess"]
+    permission_set_names = ["ObjectStorageReadOnly", "ObjectStorageObjectsRead"]
   }
 }
 

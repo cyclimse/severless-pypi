@@ -1,7 +1,5 @@
-use core::fmt;
-use std::fmt::Display;
-
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use serde_plain::derive_display_from_serialize;
 
 const TEST_PYPI_URL: &str = "test.pypi.org";
 
@@ -9,7 +7,7 @@ fn default_pypi_index() -> String {
     TEST_PYPI_URL.to_string()
 }
 
-#[derive(Deserialize, Debug, PartialEq, Clone)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub enum ScalewayRegion {
     FrPar,
@@ -17,11 +15,7 @@ pub enum ScalewayRegion {
     PlWaw,
 }
 
-impl Display for ScalewayRegion {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fmt::Debug::fmt(self, f)
-    }
-}
+derive_display_from_serialize!(ScalewayRegion);
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {

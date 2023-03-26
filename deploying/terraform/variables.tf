@@ -1,7 +1,7 @@
 variable "bucket_name" {
   type        = string
   description = "Bucket to store dependencies into."
-  default     = "my-pypi-index"
+  default     = "sls-pypi-index"
 }
 
 variable "zig_toolchain" {
@@ -18,6 +18,6 @@ variable "worker_pyhon_version" {
 
 variable "worker_memory_limit" {
   type        = number
-  description = "Memory limit to use for worker. Higher makes build faster."
+  description = "Memory limit to use for worker. Higher makes builds faster."
   default     = 4096
 }
