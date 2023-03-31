@@ -116,7 +116,7 @@ pub fn redirect_to_reserved(project: &mut IndexProject) {
         if file.filename.ends_with(".tar.gz") {
             let version = file
                 .filename
-                .split("-")
+                .split('-')
                 .nth(1)
                 .unwrap()
                 .strip_suffix(".tar.gz")
@@ -131,7 +131,7 @@ pub fn redirect_to_reserved(project: &mut IndexProject) {
     project.files.clear();
 
     for file in &wheels {
-        let version = file.filename.split("-").nth(1).unwrap();
+        let version = file.filename.split('-').nth(1).unwrap();
         let url = Uri::try_from(file.url.clone()).unwrap();
         let path: Vec<&str> = url.path().split('/').collect();
 
@@ -187,7 +187,7 @@ pub async fn download_package(
                 kind: GetObjectErrorKind::NoSuchKey(_),
                 ..
             } => {}
-            err @ _ => {
+            err => {
                 let bucket = &state.config.s3_bucket;
                 error!("Got {err} while calling get object in {bucket} on key {key}");
                 return Err(ServiceError::GenericError {

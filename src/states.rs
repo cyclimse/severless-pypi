@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use aws_credential_types::Credentials;
-use aws_sdk_s3;
 use aws_smithy_client::http_connector::ConnectorSettings;
 use aws_smithy_client::hyper_ext;
 use axum::extract::FromRef;

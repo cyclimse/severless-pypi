@@ -7,7 +7,7 @@ fn default_pypi_index() -> String {
     TEST_PYPI_URL.to_string()
 }
 
-#[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "kebab-case")]
 pub enum ScalewayRegion {
     FrPar,

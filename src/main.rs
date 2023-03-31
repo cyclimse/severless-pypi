@@ -1,8 +1,8 @@
 mod config;
+mod errors;
 mod index;
 mod pep_691;
 mod states;
-mod errors;
 
 use axum::{routing::get, Router};
 use config::Config;

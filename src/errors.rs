@@ -16,16 +16,16 @@ pub enum ServiceError {
 
 impl From<hyper::Error> for ServiceError {
     fn from(error: hyper::Error) -> Self {
-        return ServiceError::HyperError { error };
+        ServiceError::HyperError { error }
     }
 }
 
 impl From<hyper::StatusCode> for ServiceError {
     fn from(status: hyper::StatusCode) -> Self {
-        return ServiceError::GenericError {
+        ServiceError::GenericError {
             status: Some(status),
             message: status.canonical_reason().map(str::to_owned),
-        };
+        }
     }
 }
 

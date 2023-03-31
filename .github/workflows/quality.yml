@@ -1,0 +1,24 @@
+name: Quality
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        override: true
+        components: rustfmt, clippy
+    # Rust fmt
+    - name: Run rustfmt
+      run: cargo fmt -- --check
+    # Clippy
+    - name: Run clippy
+      run: cargo clippy -- -D warnings
