@@ -38,7 +38,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Build and push Docker images
+      - name: Build the index image with cache
         uses: docker/build-push-action@v4
         with:
           context: .
@@ -48,9 +48,10 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Start the stack
+      - name: Start the CI stack
         run: |
           mv e2e/e2e.env .env
+          rm docker-compose.override.yml
           docker compose up -d
 
       - run: pytest e2e/e2e.py
