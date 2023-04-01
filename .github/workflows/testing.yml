@@ -47,6 +47,6 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Start the stack
-        run: docker compose up -d
+        run: docker compose up -d --env-file e2e/e2e.env
 
       - run: pytest e2e/e2e.py
