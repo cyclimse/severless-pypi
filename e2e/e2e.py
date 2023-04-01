@@ -14,7 +14,7 @@ PYTHON_VERSIONS = ["3.11"]
 BASE_IMAGE = "rg.fr-par.scw.cloud/scwfunctionsruntimes-public/python-dep:3.11"
 
 # The tests are run in a container in the same network as the docker-compose services.
-DOCKER_COMPOSE_NETWORK = "serverless_pypi_default"
+DOCKER_COMPOSE_NETWORK = "sls-pypi-net"
 INDEX_URL = "http://index:4000/"
 
 

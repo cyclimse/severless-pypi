@@ -18,8 +18,6 @@ RUN cargo build --release
 
 FROM alpine:3.17
 
-RUN apk add --update --no-cache openssl-dev
-
 WORKDIR /home/app
 
 COPY --from=build /sls-pypi/target/release/sls-pypi .
