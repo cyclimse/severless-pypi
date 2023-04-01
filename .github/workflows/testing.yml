@@ -1,0 +1,69 @@
+name: testing
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps: 
+      - uses: actions/checkout@v3
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - run: cargo test
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - run: pip install -r e2e/requirements.txt
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Build the index image with cache
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: false
+          load: true
+          tags: |
+            index:latest
+          cache-from: type=gha,scope=buildkit_index
+          cache-to: type=gha,mode=max,scope=buildkit_index
+
+      - name: Build the worker image with cache
+        uses: docker/build-push-action@v4
+        with:
+          context: ./worker
+          push: false
+          load: true
+          tags: |
+            worker:latest
+          cache-from: type=gha,scope=buildkit_worker
+          cache-to: type=gha,mode=max,scope=buildkit_worker
+
+      - name: Start the CI stack
+        run: |
+          mv e2e/e2e.env .env
+          rm docker-compose.override.yml
+          docker compose up -d
+
+      - run: pytest -s e2e/e2e.py
