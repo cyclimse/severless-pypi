@@ -52,7 +52,7 @@ jobs:
       - name: Build the worker image with cache
         uses: docker/build-push-action@v4
         with:
-          context: .
+          context: ./worker
           push: false
           load: true
           tags: |
