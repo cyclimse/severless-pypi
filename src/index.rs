@@ -1,5 +1,6 @@
+use crate::controller;
 use crate::errors::{self, ServiceError};
-use crate::pep_691::{self, IndexProject};
+use crate::pep_691;
 use crate::states::AppState;
 use aws_sdk_s3::error::{GetObjectError, GetObjectErrorKind};
 use axum::extract::Query;
@@ -99,48 +100,13 @@ pub async fn pypi_package(
         }
     };
 
-    redirect_to_reserved(&mut project);
+    controller::redirect_to_reserved(&mut project);
 
     let body = serde_json::to_vec(&project).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Response::builder()
         .header(http::header::CONTENT_TYPE, pep_691::SUPPORTED_CONTENT_TYPE)
         .body(Body::from(body))
         .unwrap())
-}
-
-pub fn redirect_to_reserved(project: &mut IndexProject) {
-    let mut versions = std::collections::HashMap::new();
-
-    let mut wheels = Vec::new();
-    for file in &project.files {
-        if file.filename.ends_with(".tar.gz") {
-            let version = file
-                .filename
-                .split('-')
-                .nth(1)
-                .unwrap()
-                .strip_suffix(".tar.gz")
-                .unwrap()
-                .to_string();
-            versions.insert(version, file.url.clone());
-        } else {
-            wheels.push(file.clone());
-        }
-    }
-
-    project.files.clear();
-
-    for file in &wheels {
-        let version = file.filename.split('-').nth(1).unwrap();
-        let url = Uri::try_from(file.url.clone()).unwrap();
-        let path: Vec<&str> = url.path().split('/').collect();
-
-        if let Some(tarball) = versions.get(version) {
-            let mut file = file.clone();
-            file.url = format!("download/{}?archive={}", path.last().unwrap(), tarball);
-            project.files.push(file);
-        }
-    }
 }
 
 #[derive(Deserialize)]
