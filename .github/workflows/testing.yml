@@ -49,6 +49,17 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Build the worker image with cache
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: false
+          load: true
+          tags: |
+            worker:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
       - name: Start the CI stack
         run: |
           mv e2e/e2e.env .env

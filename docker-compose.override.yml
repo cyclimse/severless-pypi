@@ -3,3 +3,7 @@ services:
     image: index
     build:
       context: .
+  worker:
+    image: worker
+    build:
+      context: ./worker
