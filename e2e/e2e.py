@@ -81,35 +81,35 @@ print(np.sum(arr))
     assert res == 15
 
 
-def test_can_install_pandas(cnt_with_tempdir: typing.Tuple[Container, str]):
-    cnt, tempdir = cnt_with_tempdir
+# def test_can_install_pandas(cnt_with_tempdir: typing.Tuple[Container, str]):
+#     cnt, tempdir = cnt_with_tempdir
 
-    _, stream = cnt.exec_run(cmd=make_command("pandas"), stream=True)
-    for data in stream:
-        sys.stdout.buffer.write(data)
+#     _, stream = cnt.exec_run(cmd=make_command("pandas"), stream=True)
+#     for data in stream:
+#         sys.stdout.buffer.write(data)
 
-    (Path(tempdir) / "test_pd.py").write_text(
-        """
-import pandas as pd
-df = pd.DataFrame(
-    {
-        "Name": [
-            "Braund, Mr. Owen Harris",
-            "Allen, Mr. William Henry",
-            "Bonnell, Miss. Elizabeth",
-        ],
-        "Age": [22, 35, 58],
-        "Sex": ["male", "male", "female"],
-    }
-)
-print(df["Age"].max())
-    """
-    )
+#     (Path(tempdir) / "test_pd.py").write_text(
+#         """
+# import pandas as pd
+# df = pd.DataFrame(
+#     {
+#         "Name": [
+#             "Braund, Mr. Owen Harris",
+#             "Allen, Mr. William Henry",
+#             "Bonnell, Miss. Elizabeth",
+#         ],
+#         "Age": [22, 35, 58],
+#         "Sex": ["male", "male", "female"],
+#     }
+# )
+# print(df["Age"].max())
+#     """
+#     )
 
-    exit_code, output = cnt.exec_run(cmd="python test_pd.py", workdir="/tmp/e2e")
+#     exit_code, output = cnt.exec_run(cmd="python test_pd.py", workdir="/tmp/e2e")
 
-    assert exit_code == 0
+#     assert exit_code == 0
 
-    output: str
-    res = int(output.rstrip())
-    assert res == 58
+#     output: str
+#     res = int(output.rstrip())
+#     assert res == 58

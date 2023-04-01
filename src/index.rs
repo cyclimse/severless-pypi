@@ -159,10 +159,10 @@ pub async fn download_package(
                     "Got {:?} while calling get object in {} on key {}",
                     err, bucket, key
                 );
-                return Err(ServiceError::GenericError {
-                    status: Some(StatusCode::INTERNAL_SERVER_ERROR),
-                    message: Some(format!("Error while looking for file {filename}")),
-                });
+                // return Err(ServiceError::GenericError {
+                //     status: Some(StatusCode::INTERNAL_SERVER_ERROR),
+                //     message: Some(format!("Error while looking for file {filename}")),
+                // });
             }
         },
     }

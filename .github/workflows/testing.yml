@@ -66,4 +66,4 @@ jobs:
           rm docker-compose.override.yml
           docker compose up -d
 
-      - run: pytest e2e/e2e.py
+      - run: pytest -s e2e/e2e.py
